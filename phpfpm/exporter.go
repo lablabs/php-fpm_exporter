@@ -31,6 +31,7 @@ type Exporter struct {
 	PoolManager PoolManager
 
 	CountProcessState bool
+	// MetricsScriptPath string
 
 	up                       *prometheus.Desc
 	scrapeFailues            *prometheus.Desc
@@ -58,6 +59,7 @@ func NewExporter(pm PoolManager) *Exporter {
 		PoolManager: pm,
 
 		CountProcessState: false,
+		// MetricsScriptPath: "",
 
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),

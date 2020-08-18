@@ -8,6 +8,8 @@ services:
       - "9031:9000"
     environment:
       PHP_FPM_PM_STATUS_PATH: "/status"
+    volumes:
+      - "../metrics:/srv/metrics"
 
   phpfpm2:
     image: hipages/php
@@ -15,6 +17,8 @@ services:
       - "9032:9000"
     environment:
       PHP_FPM_PM_STATUS_PATH: "/status"
+    volumes:
+      - "../metrics:/srv/metrics"
 
   phpfpm3:
     image: hipages/php
@@ -22,6 +26,8 @@ services:
       - "9033:9000"
     environment:
       PHP_FPM_PM_STATUS_PATH: "/status"
+    volumes:
+      - "../metrics:/srv/metrics"
 
   exporter:
     image: hipages/php-fpm_exporter:latest

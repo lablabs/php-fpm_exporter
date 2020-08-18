@@ -13,11 +13,17 @@ services:
     image: hipages/php
     environment:
       PHP_FPM_PM_STATUS_PATH: "/status"
+    volumes:
+      - "../metrics:/srv/metrics"
 
   exporter:
-    image: hipages/php-fpm_exporter:latest
+    build:
+      context: ../
+      dockerfile: ../Dockerfile
+#    image: hipages/php-fpm_exporter:latest
     ports:
       - "9253:9253"
     environment:
       PHP_FPM_SCRAPE_URI: "tcp://phpfpm:9000/status"
+      PHP_FPM_METRICS_SCRIPT_PATH: "/srv/metrics/metrics.php"
       PHP_FPM_LOG_LEVEL: "debug"

@@ -66,6 +66,7 @@ type PoolManager struct {
 type Pool struct {
 	// The address of the pool, e.g. tcp://127.0.0.1:9000 or unix:///tmp/php-fpm.sock
 	Address             string        `json:"-"`
+	MetricsScriptPath   string        `json:"-"`
 	ScrapeError         error         `json:"-"`
 	ScrapeFailures      int64         `json:"-"`
 	Name                string        `json:"pool"`
@@ -83,6 +84,9 @@ type Pool struct {
 	MaxChildrenReached  int64         `json:"max children reached"`
 	SlowRequests        int64         `json:"slow requests"`
 	Processes           []PoolProcess `json:"processes"`
+	opcache
+	realpath
+	
 }
 
 type requestDuration int64
@@ -115,8 +119,8 @@ type PoolProcessStateCounter struct {
 }
 
 // Add will add a pool to the pool manager based on the given URI.
-func (pm *PoolManager) Add(uri string) Pool {
-	p := Pool{Address: uri}
+func (pm *PoolManager) Add(uri string, metricsScriptPath string) Pool {
+	p := Pool{Address: uri, MetricsScriptPath: metricsScriptPath}
 	pm.Pools = append(pm.Pools, p)
 	return p
 }

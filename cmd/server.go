@@ -33,6 +33,8 @@ var (
 	metricsEndpoint  string
 	scrapeURIs       []string
 	fixProcessCount  bool
+	//	scrapePHPmetrics     bool
+	metricsScriptPath string
 )
 
 // serverCmd represents the server command
@@ -46,7 +48,7 @@ var serverCmd = &cobra.Command{
 		pm := phpfpm.PoolManager{}
 
 		for _, uri := range scrapeURIs {
-			pm.Add(uri)
+			pm.Add(uri, metricsScriptPath)
 		}
 
 		exporter := phpfpm.NewExporter(pm)
@@ -55,6 +57,11 @@ var serverCmd = &cobra.Command{
 			log.Info("Idle/Active/Total Processes will be calculated by php-fpm_exporter.")
 			exporter.CountProcessState = true
 		}
+
+		// if metricsScriptPath != "" {
+		// 	log.Info("php-fpm_exporter will try to gather internal PHP vm metrics (apc, apcu, opcache, realpath_cache) by executing script on a given path.")
+		// 	exporter.MetricsScriptPath = metricsScriptPath
+		// }
 
 		prometheus.MustRegister(exporter)
 
@@ -120,6 +127,8 @@ func init() {
 	serverCmd.Flags().StringVar(&metricsEndpoint, "web.telemetry-path", "/metrics", "Path under which to expose metrics.")
 	serverCmd.Flags().StringSliceVar(&scrapeURIs, "phpfpm.scrape-uri", []string{"tcp://127.0.0.1:9000/status"}, "FastCGI address, e.g. unix:///tmp/php.sock;/status or tcp://127.0.0.1:9000/status")
 	serverCmd.Flags().BoolVar(&fixProcessCount, "phpfpm.fix-process-count", false, "Enable to calculate process numbers via php-fpm_exporter since PHP-FPM sporadically reports wrong active/idle/total process numbers.")
+	//	serverCmd.Flags().BoolVar(&scrapePHPmetrics, "phpfpm.scrape-php-metrics", false, "Enable scraping of PHP internal metrics returned with a script at PHP_FPM_METRICS_SCRIPT_PATH.")
+	serverCmd.Flags().StringVar(&metricsScriptPath, "phpfpm.metrics-script-path", "/srv/metrics/metrics.php", "Path to PHP metrics script executed with FastCGI e.g. /srv/metrics/metrics.php.")
 
 	//viper.BindEnv("web.listen-address", "PHP_FPM_WEB_LISTEN_ADDRESS")
 	//viper.BindPFlag("web.listen-address", serverCmd.Flags().Lookup("web.listen-address"))
@@ -131,6 +140,8 @@ func init() {
 		"PHP_FPM_WEB_TELEMETRY_PATH": "web.telemetry-path",
 		"PHP_FPM_SCRAPE_URI":         "phpfpm.scrape-uri",
 		"PHP_FPM_FIX_PROCESS_COUNT":  "phpfpm.fix-process-count",
+		//		"PHP_FPM_SCRAPE_METRICS":      "phpfpm.scrape-php-metrics",
+		"PHP_FPM_METRICS_SCRIPT_PATH": "phpfpm.metrics-script-path",
 	}
 
 	mapEnvVars(envs, serverCmd)

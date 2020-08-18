@@ -1,10 +1,19 @@
+FROM golang:1.14-stretch as builder
+
+COPY . /go/src/github.com/hipages/php-fpm_exporter
+WORKDIR /go/src/github.com/hipages/php-fpm_exporter
+
+ENV CGO_ENABLED=0
+
+RUN go build -ldflags=all= -s -w .
+
 FROM alpine:3.11
 
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION
 
-COPY php-fpm_exporter /
+COPY --from=builder /go/src/github.com/hipages/php-fpm_exporter/php-fpm_exporter /
 
 EXPOSE     9253
 ENTRYPOINT [ "/php-fpm_exporter", "server" ]
