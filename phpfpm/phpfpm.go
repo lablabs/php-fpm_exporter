@@ -16,6 +16,7 @@ package phpfpm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -64,8 +65,8 @@ type PoolManager struct {
 
 // Pool describes a single PHP-FPM pool that can be reached via a Socket or TCP address
 type Pool struct {
-	// The address of the pool, e.g. tcp://127.0.0.1:9000 or unix:///tmp/php-fpm.sock
-	Address             string        `json:"-"`
+	ScrapeHost          string        `json:"-"`
+	ScrapePath          string        `json:"-"`
 	ScrapeError         error         `json:"-"`
 	ScrapeFailures      int64         `json:"-"`
 	Name                string        `json:"pool"`
@@ -83,6 +84,8 @@ type Pool struct {
 	MaxChildrenReached  int64         `json:"max children reached"`
 	SlowRequests        int64         `json:"slow requests"`
 	Processes           []PoolProcess `json:"processes"`
+	CacheScriptPath     string        `json:"-"`
+	CacheStatus         CacheStatus   `json:"-"`
 }
 
 type requestDuration int64
@@ -114,9 +117,62 @@ type PoolProcessStateCounter struct {
 	Ending         int64
 }
 
+// CacheStatus aggregates information about all scraped caches
+type CacheStatus struct {
+	OPcacheStatus OPcacheStatus `json:"opcache"`
+}
+
+// OPcacheStatus contains information about OPcache
+type OPcacheStatus struct {
+	OPcacheEnabled       bool                 `json:"opcache_enabled"`
+	CacheFull            bool                 `json:"cache_full"`
+	RestartPending       bool                 `json:"restart_pending"`
+	RestartInProgress    bool                 `json:"restart_in_progress"`
+	MemoryUsage          MemoryUsage          `json:"memory_usage"`
+	InternedStringsUsage InternedStringsUsage `json:"interned_strings_usage"`
+	OPcacheStatistics    OPcacheStatistics    `json:"opcache_statistics"`
+}
+
+// MemoryUsage contains information about OPcache memory usage
+type MemoryUsage struct {
+	UsedMemory              int64   `json:"used_memory"`
+	FreeMemory              int64   `json:"free_memory"`
+	WastedMemory            int64   `json:"wasted_memory"`
+	CurrentWastedPercentage float64 `json:"current_wasted_percentage"`
+}
+
+// InternedStringsUsage contains information about OPcache interned strings usage
+type InternedStringsUsage struct {
+	BufferSize     int64 `json:"buffer_size"`
+	UsedMemory     int64 `json:"used_memory"`
+	FreeMemory     int64 `json:"free_memory"`
+	NumerOfStrings int64 `json:"number_of_strings"`
+}
+
+// OPcacheStatistics contains information about OPcache statistics
+type OPcacheStatistics struct {
+	NumCachedScripts   int64   `json:"num_cached_scripts"`
+	NumCachedKeys      int64   `json:"num_cached_keys"`
+	MaxCachedKeys      int64   `json:"max_cached_keys"`
+	Hits               int64   `json:"hits"`
+	StartTime          int64   `json:"start_time"`
+	LastRestartTime    int64   `json:"last_restart_time"`
+	OOMRestarts        int64   `json:"oom_restarts"`
+	HashRestarts       int64   `json:"hash_restarts"`
+	ManualRestarts     int64   `json:"manual_restarts"`
+	Misses             int64   `json:"misses"`
+	BlacklistMisses    int64   `json:"blacklist_misses"`
+	BlacklistMissRatio float64 `json:"blacklist_miss_ratio"`
+	OPcacheHitRate     float64 `json:"opcache_hit_rate"`
+}
+
 // Add will add a pool to the pool manager based on the given URI.
-func (pm *PoolManager) Add(uri string) Pool {
-	p := Pool{Address: uri}
+func (pm *PoolManager) Add(ScrapeHost, ScrapePath, cacheScriptPath string) Pool {
+	p := Pool{
+		ScrapeHost:      ScrapeHost,
+		ScrapePath:      ScrapePath,
+		CacheScriptPath: cacheScriptPath,
+	}
 	pm.Pools = append(pm.Pools, p)
 	return p
 }
@@ -150,7 +206,7 @@ func (pm *PoolManager) Update() (err error) {
 func (p *Pool) Update() (err error) {
 	p.ScrapeError = nil
 
-	scheme, address, path, err := parseURL(p.Address)
+	scheme, address, path, err := parseURL(p.ScrapeHost + p.ScrapePath)
 	if err != nil {
 		return p.error(err)
 	}
@@ -184,11 +240,40 @@ func (p *Pool) Update() (err error) {
 
 	content = JSONResponseFixer(content)
 
-	log.Debugf("Pool[%v]: %v", p.Address, string(content))
+	log.Debugf("Pool[%v]: %v%v", p.ScrapeHost, p.ScrapePath, string(content))
 
 	if err = json.Unmarshal(content, &p); err != nil {
-		log.Errorf("Pool[%v]: %v", p.Address, string(content))
+		log.Errorf("Pool[%v]: %v%v", p.ScrapeHost, p.ScrapePath, string(content))
 		return p.error(err)
+	}
+
+	client, err := fcgiclient.DialTimeout(scheme, address, time.Duration(3)*time.Second)
+	if err != nil {
+		panic(err)
+		// return nil, err
+	}
+
+	env = map[string]string{
+		"SCRIPT_FILENAME": p.CacheScriptPath,
+	}
+
+	resp, err = client.Get(env)
+	if err != nil {
+		panic(err)
+
+		// return nil, err
+	}
+
+	content, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+
+		// return nil, err
+	}
+
+	err = json.Unmarshal(content, &p.CacheStatus)
+	if err != nil {
+		return errors.New(string(content))
 	}
 
 	return nil
